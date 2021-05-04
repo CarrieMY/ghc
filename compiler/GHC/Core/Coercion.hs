@@ -71,7 +71,8 @@ module GHC.Core.Coercion (
         isReflCoVar_maybe, isGReflMCo, mkGReflLeftMCo, mkGReflRightMCo,
         mkCoherenceRightMCo,
 
-        coToMCo, mkTransMCo, mkTransMCoL, mkCastTyMCo, mkSymMCo, isReflMCo,
+        coToMCo, mkTransMCo, mkTransMCoL, mkTransMCoR, mkCastTyMCo, mkSymMCo,
+        isReflMCo, checkReflexiveMCo,
 
         -- ** Coercion variables
         mkCoVar, isCoVar, coVarName, setCoVarName, setCoVarUnique,
@@ -309,6 +310,11 @@ coToMCo :: Coercion -> MCoercion
 coToMCo co | isReflCo co = MRefl
            | otherwise   = MCo co
 
+checkReflexiveMCo :: MCoercion -> MCoercion
+checkReflexiveMCo MRefl                       = MRefl
+checkReflexiveMCo (MCo co) | isReflexiveCo co = MRefl
+                           | otherwise        = MCo co
+
 -- | Tests if this MCoercion is obviously generalized reflexive
 -- Guaranteed to work very quickly.
 isGReflMCo :: MCoercion -> Bool
@@ -330,8 +336,12 @@ mkTransMCo co1       MRefl     = co1
 mkTransMCo (MCo co1) (MCo co2) = MCo (mkTransCo co1 co2)
 
 mkTransMCoL :: MCoercion -> Coercion -> MCoercion
-mkTransMCoL MRefl     co2 = MCo co2
+mkTransMCoL MRefl     co2 = coToMCo co2
 mkTransMCoL (MCo co1) co2 = MCo (mkTransCo co1 co2)
+
+mkTransMCoR :: Coercion -> MCoercion -> MCoercion
+mkTransMCoR co1 MRefl     = coToMCo co1
+mkTransMCoR co1 (MCo co2) = MCo (mkTransCo co1 co2)
 
 -- | Get the reverse of an 'MCoercion'
 mkSymMCo :: MCoercion -> MCoercion
