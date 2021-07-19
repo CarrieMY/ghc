@@ -657,6 +657,11 @@ validate-x86_64-darwin:
       - cabal-cache-amd64
       - toolchain
 
+validate-aarch64-darwin-llvm:
+  extends: validate-aarch64-darwin
+  variables:
+    BUILD_FLAVOUR: perf+llvm
+
 validate-aarch64-darwin:
   extends: .validate-hadrian
   stage: full-build
