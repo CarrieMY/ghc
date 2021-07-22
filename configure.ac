@@ -1208,7 +1208,7 @@ AC_COMPILE_IFELSE(
    AC_DEFINE([CC_SUPPORTS_TLS],[0],[Define to 1 if __thread is supported])
   ])
 
-dnl large address space support (see includes/rts/storage/MBlock.h)
+dnl large address space support (see rts/include/rts/storage/MBlock.h)
 dnl
 dnl Darwin has vm_allocate/vm_protect
 dnl Linux has mmap(MAP_NORESERVE)/madv(MADV_DONTNEED)
