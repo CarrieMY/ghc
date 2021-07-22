@@ -2024,20 +2024,20 @@ occAnal env (Let bind body)
                      body_usage          of { (final_usage, new_binds) ->
        (final_usage, mkLets new_binds body') }}
 
-occAnalArgs :: OccEnv -> [CoreExpr] -> [OneShots] -> (UsageDetails, [CoreExpr])
-occAnalArgs _ [] _
-  = (emptyDetails, [])
-
-occAnalArgs env (arg:args) one_shots
-  | isTypeArg arg
-  = case occAnalArgs env args one_shots of { (uds, args') ->
-    (uds, arg:args') }
-
-  | otherwise
-  = case argCtxt env one_shots           of { (arg_env, one_shots') ->
-    case occAnal arg_env arg             of { (uds1, arg') ->
-    case occAnalArgs env args one_shots' of { (uds2, args') ->
-    (uds1 `andUDs` uds2, arg':args') }}}
+occAnalArgs :: OccEnv -> CoreExpr -> [CoreExpr] -> [OneShots] -> (UsageDetails, CoreExpr)
+-- The `fun` argument is just an accumulating parameter,
+-- the base for building the application we return
+occAnalArgs env fun args one_shots
+  = go emptyDetails fun args one_shots
+  where
+    go uds fun [] _ = (uds, fun)
+    go uds fun (arg:args) one_shots
+      = go (uds `andUDs` arg_uds) (fun `App` arg') args one_shots'
+      where
+        !(arg_uds, arg') = occAnal arg_env arg
+        !(arg_env, one_shots')
+            | isTypeArg arg = (env, one_shots)
+            | otherwise     = valArgCtxt env one_shots
 
 {-
 Applications are dealt with specially because we want
@@ -2075,9 +2075,13 @@ occAnalApp env (Var fun, args, ticks)
   = (usage, mkTicks ticks $ mkApps (Var fun) [t1, t2, arg'])
 
 occAnalApp env (Var fun_id, args, ticks)
-  = (all_uds, mkTicks ticks $ mkApps fun' args')
+  = (all_uds, mkTicks ticks app')
   where
-    (fun', fun_id') = lookupBndrSwap env fun_id
+    -- Lots of banged bindings: this is a very heavily bit of code,
+    -- so it pays not to make lots of thunks here, all of which
+    -- will ultimately be forced.
+    !(fun', fun_id')  = lookupBndrSwap env fun_id
+    !(args_uds, app') = occAnalArgs env fun' args one_shots
 
     fun_uds = mkOneOcc fun_id' int_cxt n_args
        -- NB: fun_uds is computed for fun_id', not fun_id
@@ -2085,8 +2089,7 @@ occAnalApp env (Var fun_id, args, ticks)
 
     all_uds = fun_uds `andUDs` final_args_uds
 
-    !(args_uds, args') = occAnalArgs env args one_shots
-    !final_args_uds = markAllNonTail                        $
+    !final_args_uds = markAllNonTail                              $
                       markAllInsideLamIf (isRhsEnv env && is_exp) $
                       args_uds
        -- We mark the free vars of the argument of a constructor or PAP
@@ -2099,14 +2102,14 @@ occAnalApp env (Var fun_id, args, ticks)
        -- This is the *whole point* of the isRhsEnv predicate
        -- See Note [Arguments of let-bound constructors]
 
-    n_val_args = valArgCount args
-    n_args     = length args
-    int_cxt    = case occ_encl env of
+    !n_val_args = valArgCount args
+    !n_args     = length args
+    !int_cxt    = case occ_encl env of
                    OccScrut -> IsInteresting
                    _other   | n_val_args > 0 -> IsInteresting
                             | otherwise      -> NotInteresting
 
-    is_exp     = isExpandableApp fun_id n_val_args
+    !is_exp     = isExpandableApp fun_id n_val_args
         -- See Note [CONLIKE pragma] in GHC.Types.Basic
         -- The definition of is_exp should match that in GHC.Core.Opt.Simplify.prepareRhs
 
@@ -2117,7 +2120,7 @@ occAnalApp env (Var fun_id, args, ticks)
 
 occAnalApp env (fun, args, ticks)
   = (markAllNonTail (fun_uds `andUDs` args_uds),
-     mkTicks ticks $ mkApps fun' args')
+     mkTicks ticks app')
   where
     !(fun_uds, fun') = occAnal (addAppCtxt env args) fun
         -- The addAppCtxt is a bit cunning.  One iteration of the simplifier
@@ -2126,7 +2129,7 @@ occAnalApp env (fun, args, ticks)
         -- Here we would like to mark x,y as one-shot, and treat the whole
         -- thing much like a let.  We do this by pushing some OneShotLam items
         -- onto the context stack.
-    !(args_uds, args') = occAnalArgs env args []
+    !(args_uds, app') = occAnalArgs env fun' args []
 
 addAppCtxt :: OccEnv -> [Arg CoreBndr] -> OccEnv
 addAppCtxt env@(OccEnv { occ_one_shots = ctxt }) args
@@ -2352,10 +2355,10 @@ scrutCtxt env alts
 rhsCtxt :: OccEnv -> OccEnv
 rhsCtxt env = env { occ_encl = OccRhs, occ_one_shots = [] }
 
-argCtxt :: OccEnv -> [OneShots] -> (OccEnv, [OneShots])
-argCtxt env []
+valArgCtxt :: OccEnv -> [OneShots] -> (OccEnv, [OneShots])
+valArgCtxt env []
   = (env { occ_encl = OccVanilla, occ_one_shots = [] }, [])
-argCtxt env (one_shots:one_shots_s)
+valArgCtxt env (one_shots:one_shots_s)
   = (env { occ_encl = OccVanilla, occ_one_shots = one_shots }, one_shots_s)
 
 isRhsEnv :: OccEnv -> Bool
