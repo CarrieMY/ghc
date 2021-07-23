@@ -35,7 +35,7 @@
  * etc.).
  */
 
-#include "PosixSource.h"
+#include "rts/PosixSource.h"
 #include "Rts.h"
 
 #include "Ticker.h"

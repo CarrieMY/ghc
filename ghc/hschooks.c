@@ -4,16 +4,26 @@ for various bits of the RTS.  They are linked
 in instead of the defaults.
 */
 
-#include "../rts/PosixSource.h"
-
 /*
- * This should be linked against Rts.h from the compiler which is compiling us.
+ * These should be linked against headers from the compiler which is compiling us.
  * For instance, if we are compiling this file to produce the stage1 compiler,
  * we should use Rts.h from stage0.
  */
-#include "Rts.h"
+#if GHC_STAGE > 1
+#  include <rts/PosixSource.h>
+#else // PosixSource.h not yet exposed, hacky inline for now.
+#  include <ghcplatform.h>
+#  if defined(solaris2_HOST_OS)
+#  define _POSIX_C_SOURCE 200112L
+#  define _XOPEN_SOURCE   600
+#  else
+#  define _POSIX_C_SOURCE 200809L
+#  define _XOPEN_SOURCE   700
+#  endif
+#endif
+#include <Rts.h>
 
-#include "HsFFI.h"
+#include <HsFFI.h>
 
 #include <string.h>
 #include <stdbool.h>
